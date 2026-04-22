@@ -9,8 +9,8 @@ from pathfinding.core.heuristic import manhattan, euclidean
 from utils.constants import * 
 
 def has_line_of_sight(grid, p1, p2):
-    x1, y1 = p1.x, p1.y
-    x2, y2 = p2.x, p2.y
+    x1, y1 = p1
+    x2, y2 = p2
     
     dx = abs(x2 - x1)
     dy = abs(y2 - y1)
@@ -44,12 +44,39 @@ def has_line_of_sight(grid, p1, p2):
     
     return True
 
+def add_line(path, p1, p2):
+    x1, y1 = p1
+    x2, y2 = p2
+    
+    dx = abs(x2 - x1)
+    dy = abs(y2 - y1)
+    
+    step_x = 1 if x2 > x1 else -1
+    step_y = 1 if y2 > y1 else -1
+    
+    error = dx - dy
+    x, y = x1, y1
+    
+    while not (x == x2 and y == y2):
+        error2 = error * 2
+        
+        if error2 > -dy:
+            error -= dy
+            x += step_x
+        
+        if error2 < dx:
+            error += dx
+            y += step_y
+        
+        path.append((x, y))
+
 
 def pull_string(grid, path):
     if len(path) <= 2:
         return path
 
-    smoothed_path = [path[0]]
+    x0, y0 = path[0]
+    smoothed_path = [(x0, y0)]
     current_idx = 0
     
     while current_idx < len(path) - 1:
@@ -60,7 +87,7 @@ def pull_string(grid, path):
                 best_visible_idx = look_ahead
                 break
         
-        smoothed_path.append(path[best_visible_idx])
+        add_line(smoothed_path, path[current_idx], path[best_visible_idx])
         current_idx = best_visible_idx
         
     return smoothed_path

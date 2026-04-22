@@ -135,9 +135,12 @@ class PathVisualizer:
             cv2.destroyAllWindows()
             #TODO delete
 
-            path = pull_string(self.grid, path)
+            path = [(p.x, p.y) for p in path]
+            path = pull_string(self.grid, path[::-1])
+            path = pull_string(self.grid, path[::-1])
             for point in path:
-                cv2.circle(vis_img, (point.x, point.y), 2, (255, 0, 0), -1)
+                x, y = point
+                cv2.circle(vis_img, (x, y), 2, (255, 0, 0), -1)
 
             cv2.circle(vis_img, start_pos, 5, (0, 255, 0), -1)
             cv2.circle(vis_img, end_pos, 5, (0, 0, 255), -1)
