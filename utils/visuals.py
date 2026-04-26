@@ -105,45 +105,33 @@ class PathVisualizer:
         cv2.destroyAllWindows()   
 
     def find_path(self):
-        path = find_path(self.grid, self.start, self.end)
-        result_img = self.visualize_path(path)
-
-        cv2.imshow('found path', result_img)
-        cv2.waitKey(0)  
-        cv2.destroyAllWindows()
+        path = find_path(self.start, self.end, self.grid)
+        path = pull_string(self.grid, path[::-1], True)
+        path = pull_string(self.grid, path[::-1])
+        return  smooth_trajectory(path)
+        
 
 
     def visualize_path(self, path):
         vis_img = (self.full_grid * 255).astype(np.uint8)
         vis_img = cv2.cvtColor(vis_img, cv2.COLOR_GRAY2BGR)
         
-        copy = (self.full_grid * 255).astype(np.uint8)
-        copy = cv2.cvtColor(copy, cv2.COLOR_GRAY2BGR)
-        
+        seen = set()
+        clean_path = []
+        for p in path:
+            p_int = (int(p[0]), int(p[1]))
+            if p_int not in seen:
+                clean_path.append(p_int)
+                seen.add(p_int)
+
+        path = clean_path
+
         if path:
-            start_pos = (path[0].x, path[0].y)
-            end_pos = (path[-1].x, path[-1].y)
-            #TODO delete
             for point in path:
-                cv2.circle(copy, (point.x, point.y), 2, (255, 0, 0), -1)
+                cv2.circle(vis_img, point, 1, (255, 0, 0), -1)
 
-            cv2.circle(copy, start_pos, 5, (0, 255, 0), -1)
-            cv2.circle(copy, end_pos, 5, (0, 0, 255), -1)
-
-            cv2.imshow('Pathfinding', copy)
-            cv2.waitKey(0)  
-            cv2.destroyAllWindows()
-            #TODO delete
-
-            path = [(p.x, p.y) for p in path]
-            path = pull_string(self.grid, path[::-1])
-            path = pull_string(self.grid, path[::-1])
-            for point in path:
-                x, y = point
-                cv2.circle(vis_img, (x, y), 2, (255, 0, 0), -1)
-
-            cv2.circle(vis_img, start_pos, 5, (0, 255, 0), -1)
-            cv2.circle(vis_img, end_pos, 5, (0, 0, 255), -1)
+            cv2.circle(vis_img, path[0], 5, (0, 255, 0), -1)
+            cv2.circle(vis_img, path[-1], 5, (0, 0, 255), -1)
         else:
             print("No path found.")
             

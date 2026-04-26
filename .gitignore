@@ -1,3 +1,4 @@
 /demo
 *.ply
 .gitignore
+/utils/__pycache__
