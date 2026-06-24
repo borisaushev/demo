@@ -111,7 +111,6 @@ class PathVisualizer:
         return  smooth_trajectory(path)
         
 
-
     def visualize_path(self, path):
         vis_img = (self.full_grid * 255).astype(np.uint8)
         vis_img = cv2.cvtColor(vis_img, cv2.COLOR_GRAY2BGR)

@@ -1,4 +1,5 @@
-/demo
+/.venv/
+/dataset/
 *.ply
 .gitignore
 /utils/__pycache__
