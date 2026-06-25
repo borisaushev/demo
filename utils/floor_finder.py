@@ -69,10 +69,11 @@ class FloorFinder:
 
         grid[y_indices[valid_mask], x_indices[valid_mask]] = 1
 
+        floor_points = np.copy(grid)
+
         # наращиваем точки пола
         kernel = np.ones((morph_fill_size,morph_fill_size))
         grid = cv2.morphologyEx(grid, cv2.MORPH_CLOSE, kernel)
-
 
         # проецируем точки вне пола на плоскость
         projected_outliers = project_to_plane(outliers, plane_model)
@@ -86,7 +87,8 @@ class FloorFinder:
 
         floor_obstacles = grid
         floor_obstacles[y_indices[valid_mask], x_indices[valid_mask]] = 0
-
+        floor_points[y_indices[valid_mask], x_indices[valid_mask]] = 0        
+    
         kernel = np.ones((morph_size,morph_size))
         floor_obstacles = cv2.morphologyEx(floor_obstacles, cv2.MORPH_OPEN, kernel)
 
@@ -102,22 +104,22 @@ class FloorFinder:
             if area < min_area:
                 floor_obstacles[labels == i] = 0
 
-        # сначала жестко так прям убираем шум
-        kernel = np.ones((morph_fill_size, morph_fill_size))
-        floor_polished = cv2.morphologyEx(floor_obstacles, cv2.MORPH_CLOSE, kernel)
+        # # сначала жестко так прям убираем шум
+        # kernel = np.ones((morph_fill_size, morph_fill_size))
+        # floor_polished = cv2.morphologyEx(floor_obstacles, cv2.MORPH_CLOSE, kernel)
 
-        # теперь возвращаем препятствия, которые стерлись как шум
-        floor_accessible_reversed = 1 - floor_obstacles
-        floor_polished_reversed = 1 - floor_polished
-        components_info = cv2.connectedComponentsWithStats(
-            floor_accessible_reversed.astype(np.uint8), 
-            connectivity=4, 
-            ltype=cv2.CV_32S
-        )
-        [num_labels, labels, stats, centroids] = components_info
-        for i in range(1, num_labels):
-            obstacle = floor_accessible_reversed[labels == i]
-            if np.any(cv2.bitwise_and(obstacle, floor_polished_reversed[labels == i])):
-                floor_polished[labels == i] = 0
+        # # теперь возвращаем препятствия, которые стерлись как шум
+        # floor_accessible_reversed = 1 - floor_obstacles
+        # floor_polished_reversed = 1 - floor_polished
+        # components_info = cv2.connectedComponentsWithStats(
+        #     floor_accessible_reversed.astype(np.uint8), 
+        #     connectivity=4, 
+        #     ltype=cv2.CV_32S
+        # )
+        # [num_labels, labels, stats, centroids] = components_info
+        # for i in range(1, num_labels):
+        #     obstacle = floor_accessible_reversed[labels == i]
+        #     if np.any(cv2.bitwise_and(obstacle, floor_polished_reversed[labels == i])):
+        #         floor_polished[labels == i] = 0
 
-        return floor_polished
+        return floor_points, floor_obstacles
