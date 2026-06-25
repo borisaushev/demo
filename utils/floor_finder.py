@@ -89,10 +89,23 @@ class FloorFinder:
         floor_obstacles[y_indices[valid_mask], x_indices[valid_mask]] = 0
         floor_points[y_indices[valid_mask], x_indices[valid_mask]] = 0        
     
-        kernel = np.ones((morph_size,morph_size))
+        kernel = np.ones((morph_size, morph_size))
         floor_obstacles = cv2.morphologyEx(floor_obstacles, cv2.MORPH_OPEN, kernel)
 
-        #убираем маленькие компоненты 
+
+        #убираем маленькие компоненты препятствий
+        components_info = cv2.connectedComponentsWithStats(
+            (1 - floor_obstacles).astype(np.uint8), 
+            connectivity=4, 
+            ltype=cv2.CV_32S
+        )
+        [num_labels, labels, stats, centroids] = components_info
+        for i in range(1, num_labels):
+            area = stats[i, cv2.CC_STAT_AREA]
+            if area < 100:
+                floor_obstacles[labels == i] = 1
+
+        #убираем маленькие компоненты пола
         components_info = cv2.connectedComponentsWithStats(
             floor_obstacles.astype(np.uint8), 
             connectivity=4, 
