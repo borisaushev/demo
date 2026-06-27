@@ -33,20 +33,45 @@ class FloorFinder:
         
         return np.bitwise_or(grid.astype(np.uint8), dilated_mask)
 
+    def find_floor_z_sliding_window(self, points):
+        # Extract only Z coordinates and sort them
+        z_coords = np.sort(points[:, 2])
+        
+        max_window_size = 2 * plane_distance_threshold
+        left = 0
+        best_left = 0
+        best_right = 0
+        max_count = 0
+        
+        # Slide the right pointer across the sorted Z coordinates
+        for right in range(len(z_coords)):
+            # Shrink window from the left if it exceeds the allowable width
+            while z_coords[right] - z_coords[left] > max_window_size:
+                left += 1
+                
+            # Track the window containing the most points
+            current_count = right - left + 1
+            if current_count > max_count:
+                max_count = current_count
+                best_left = left
+                best_right = right
+                
+        # The optimal floor Z is the median of the densest window
+        floor_z = np.median(z_coords[best_left:best_right + 1])
+        return floor_z
+
+
     def get_floor_grid(self, points):
-        x = points[:, 0]
-        y = points[:, 1]
+        floor_z = self.find_floor_z_sliding_window(points)
+
         z = points[:, 2]
 
-        close_mask = (np.abs(z) <= plane_distance_threshold) & \
-                     (np.abs(x) <= distance_threshold) & \
-                     (np.abs(y) <= distance_threshold)
-
+        close_mask = (np.abs(z - floor_z) <= max_dist)
         close_points = points[close_mask]
 
         # Разделяем на inliers и outliers
         z = close_points[:, 2]
-        inlier_mask = (z <= distance_threshold)
+        inlier_mask = (z <= plane_distance_threshold)
         inliers = close_points[inlier_mask]
         outliers = close_points[~inlier_mask]
 
