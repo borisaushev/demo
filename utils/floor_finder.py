@@ -10,9 +10,6 @@ from utils.visuals import *
 from scipy.ndimage import maximum_filter
 
 class FloorFinder:
-    def __init__(self, pcd):
-        self.pcd = pcd
-    
 
     def dilate_inside_points_fast(self, grid):
         R = 8
@@ -36,55 +33,33 @@ class FloorFinder:
         
         return np.bitwise_or(grid.astype(np.uint8), dilated_mask)
 
-    def get_floor_grid(self):
-        pcd = self.pcd
-        downsampled_pcd = downsample(pcd)
+    def get_floor_grid(self, points):
+        x = points[:, 0]
+        y = points[:, 1]
+        z = points[:, 2]
 
-        #Ищем плоскость пола и точки в ней и вне неё
-        plane_model, _ = downsampled_pcd.segment_plane(distance_threshold = distance_threshold,
-                                                       num_iterations = ransac_iterations,
-                                                       ransac_n = 3)
-        [a, b, c, d] = plane_model
-        #строим нормаль к поверхности   
-        normal = np.array([a, b, c])
+        close_mask = (np.abs(z) <= plane_distance_threshold) & \
+                     (np.abs(x) <= distance_threshold) & \
+                     (np.abs(y) <= distance_threshold)
 
-        # Убираем слишком далекие от пола точки
-        pcd_points = np.asarray(pcd.points)
-        close_mask = np.abs(a * pcd_points[:, 0] 
-                        + b * pcd_points[:, 1] 
-                        + c * pcd_points[:, 2] 
-                        + d) <= max_dist
-        close_points = pcd_points[close_mask]
-
-        close_points_ds = voxel_downsample_fast(close_points, grid_step)
+        close_points = points[close_mask]
 
         # Разделяем на inliers и outliers
-        close_distances_ds = np.abs(np.dot(close_points_ds, normal) + d)
-        inlier_mask = close_distances_ds <= distance_threshold
-        inliers = close_points_ds[inlier_mask]
-        outliers = close_points_ds[~inlier_mask]
-
-        #меняем направление нормали в сторону большего количества точек
-        condition = np.dot(outliers, normal) + d < 0
-        if len(outliers[condition]) > len(outliers) // 2:
-            normal = -normal
-
-        # берем 2 перпендикулярных вектора в плоскости
-        v1_norm = np.linalg.norm([b, -a, 0])
-        plane_v1 = np.asarray([b, -a, 0]) / v1_norm
-        plane_v2 = np.cross(normal, plane_v1)
+        z = close_points[:, 2]
+        inlier_mask = (z <= distance_threshold)
+        inliers = close_points[inlier_mask]
+        outliers = close_points[~inlier_mask]
 
         #проецируем точки пола на плоскость пола
-        projected = project_to_plane(inliers, plane_model)
-
-        #переходим от координат в пространстве в координаты 2-х векторов в плоскости
-        plane_coords, x_max, x_min, y_max, y_min = switch_to_plane_coords(projected, plane_v1, plane_v2)
+        plane_coords = inliers[:, :2]
+        x_min, y_min = np.min(plane_coords, axis=0)
+        x_max, y_max = np.max(plane_coords, axis=0)
 
         #строим двумерный массив, соответствующий плоскости
-        grid = np.zeros((
-            int((y_max - y_min) // grid_step + 1), 
-            int((x_max - x_min) // grid_step + 1)
-        ))
+        width = int((x_max - x_min) // grid_step + 1)
+        height = int((y_max - y_min) // grid_step + 1)
+        grid = np.zeros((height, width), dtype=np.uint8)
+
         # Инвертируем Y т.к. в opencv 0 по оси Y это самый верх
         x_indices = ((plane_coords[:, 0] - x_min) // grid_step).astype(int)
         y_indices = ((y_max - plane_coords[:, 1]) // grid_step).astype(int) 
@@ -100,11 +75,8 @@ class FloorFinder:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (morph_fill_size, morph_fill_size))
         grid = cv2.morphologyEx(grid, cv2.MORPH_CLOSE, kernel)
 
-        # проецируем точки вне пола на плоскость
-        projected_outliers = project_to_plane(outliers, plane_model)
-
         # убираем из плоскости точки, где есть препятствия
-        outliers_plane_coords = switch_to_plane_coords(projected_outliers, plane_v1, plane_v2)[0]
+        outliers_plane_coords = outliers[:, :2]
         x_indices = ((outliers_plane_coords[:, 0] - x_min) // grid_step).astype(int)
         y_indices = ((y_max - outliers_plane_coords[:, 1]) // grid_step).astype(int)
         valid_mask = (x_indices >= 0) & (x_indices < grid.shape[1]) & \
