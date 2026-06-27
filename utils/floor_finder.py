@@ -12,6 +12,33 @@ class FloorFinder:
     def __init__(self, pcd):
         self.pcd = pcd
     
+    def dilate_inside_points(self, grid):
+        R = 12
+        H, W = grid.shape
+        floor_points = np.argwhere(grid == 1)
+        
+        mask = np.zeros(grid.shape, dtype=np.uint8)
+        for y, x in floor_points:
+            if y - R < 0 or y + R >= H or x - R < 0 or x + R >= W:
+                continue
+            grid[y][x] = 0
+            window = grid[y-R : y+R+1, x-R : x+R+1]
+            
+            has_topleft =  np.any(window[0 : R+1,   0 : R+1  ] == 1)
+            has_topright = np.any(window[0 : R+1,   R : 2*R+1] == 1)
+            has_botleft =  np.any(window[R : 2*R+1, 0 : R+1  ] == 1)
+            has_botright = np.any(window[R : 2*R+1, R : 2*R+1] == 1)
+
+            if has_topleft and has_topright and has_botleft and has_botright:
+                mask[y][x] = 1
+            grid[y][x] = 1
+
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (R, R))
+        dilated_mask = cv2.dilate(mask, kernel)
+
+        return np.bitwise_or(grid.astype(np.uint8), dilated_mask)
+
     def get_floor_grid(self):
         pcd = self.pcd
         downsampled_pcd = downsample(pcd)
@@ -70,6 +97,7 @@ class FloorFinder:
         grid[y_indices[valid_mask], x_indices[valid_mask]] = 1
 
         floor_points = np.copy(grid)
+        return floor_points, self.dilate_inside_points(grid)
 
         # наращиваем точки пола
         kernel = np.ones((morph_fill_size,morph_fill_size))
