@@ -71,7 +71,7 @@ class FloorFinder:
 
         # Разделяем на inliers и outliers
         z = close_points[:, 2]
-        inlier_mask = (z <= plane_distance_threshold)
+        inlier_mask = (np.abs(z - floor_z) <= plane_distance_threshold)
         inliers = close_points[inlier_mask]
         outliers = close_points[~inlier_mask]
 
