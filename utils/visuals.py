@@ -104,35 +104,28 @@ class PathVisualizer:
         cv2.waitKey(0)
         cv2.destroyAllWindows()   
 
-    def find_path(self):
-        path = find_path(self.start, self.end, self.grid)
-        path = pull_string(self.grid, path[::-1], True)
-        path = pull_string(self.grid, path[::-1])
-        return  smooth_trajectory(path)
+def visualize_path(grid, path):
+    vis_img = (grid * 255).astype(np.uint8)
+    vis_img = cv2.cvtColor(vis_img, cv2.COLOR_GRAY2BGR)
+    
+    seen = set()
+    clean_path = []
+    for p in path:
+        p_int = (int(p[0]), int(p[1]))
+        if p_int not in seen:
+            clean_path.append(p_int)
+            seen.add(p_int)
+
+    path = clean_path
+
+    if path:
+        for point in path:
+            cv2.circle(vis_img, point, 1, (255, 0, 0), -1)
+
+        cv2.circle(vis_img, path[0], 5, (0, 255, 0), -1)
+        cv2.circle(vis_img, path[-1], 5, (0, 0, 255), -1)
+    else:
+        print("No path found.")
         
-
-    def visualize_path(self, path):
-        vis_img = (self.full_grid * 255).astype(np.uint8)
-        vis_img = cv2.cvtColor(vis_img, cv2.COLOR_GRAY2BGR)
-        
-        seen = set()
-        clean_path = []
-        for p in path:
-            p_int = (int(p[0]), int(p[1]))
-            if p_int not in seen:
-                clean_path.append(p_int)
-                seen.add(p_int)
-
-        path = clean_path
-
-        if path:
-            for point in path:
-                cv2.circle(vis_img, point, 1, (255, 0, 0), -1)
-
-            cv2.circle(vis_img, path[0], 5, (0, 255, 0), -1)
-            cv2.circle(vis_img, path[-1], 5, (0, 0, 255), -1)
-        else:
-            print("No path found.")
-            
-        return vis_img
+    return vis_img
 

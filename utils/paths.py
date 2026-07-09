@@ -7,7 +7,7 @@ import heapq
 import math
 import numpy as np
 
-def find_path(start, end, grid):
+def find_A_star_path(start, end, grid):
     """
     A* Pathfinding optimized for 2D grids.
     
@@ -221,3 +221,10 @@ def smooth_trajectory(path, max_curvature=grid_step/(diameter/2), step_size=0.2)
         final_y.extend(py)
     return list(zip(final_x, final_y))
      
+
+def find_path(start, end, grid):
+        path = find_A_star_path(start, end, grid)
+        path = pull_string(grid, path[::-1], True)
+        path = pull_string(grid, path[::-1])
+        return  smooth_trajectory(path)
+
