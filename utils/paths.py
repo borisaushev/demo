@@ -7,90 +7,61 @@ import heapq
 import math
 import numpy as np
 
-def find_A_star_path(start, end, grid):
-    """
-    A* Pathfinding optimized for 2D grids.
+def euclidean_distance(p1, p2):
+    """Calculates the direct straight-line distance between two points."""
+    return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+def greedy_best_first_search_euclidean(grid, start, goal):
+    y_len = len(grid)
+    x_len = len(grid[0])
     
-    Args:
-        start: Tuple (x, y)
-        end: Tuple (x, y)
-        grid: 2D numpy array (0 = Obstacle, 1 = Walkable)
-        
-    Returns:
-        List of tuples [(x, y), ...] representing the path.
-        Returns empty list if no path found.
-    """
-    # Ensure integer coordinates
-    start = (int(start[0]), int(start[1]))
-    end = (int(end[0]), int(end[1]))
+    # Priority Queue elements format: (heuristic_cost, current_node)
+    frontier = []
+    heapq.heappush(frontier, (euclidean_distance(start, goal), start))
     
-    # Dimensions
-    rows, cols = grid.shape
+    came_from = {start: None}
+    visited = {start}
     
-    # Priority Queue: Stores tuples of (f_score, g_score, x, y)
-    # We include g_score to break ties (prefer paths explored further)
-    open_set = []
-    heapq.heappush(open_set, (0, 0, start[0], start[1]))
-    
-    # Data Structures
-    came_from = {}  # To reconstruct path: key=(x,y), val=(parent_x, parent_y)
-    g_score = {start: 0} # Cost from start to current node
-    
-    # 8-Way Movement (Diagonal allowed)
-    # (dx, dy, cost)
+    # Movement configurations: (dr, dc, step_cost)
     movements = [
-        (0, 1, 1), (0, -1, 1), (1, 0, 1), (-1, 0, 1),       # Cardinals
-        (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414) # Diagonals
+        (0, 1), (0, -1), (1, 0),  (-1, 0), # Cardinals
+        (1, 1), (1, -1), (-1, 1), (-1, -1) # Diagonals
     ]
-
-    while open_set:
-        # Get node with lowest F score
-        current_f, current_g, cx, cy = heapq.heappop(open_set)
-        current = (cx, cy)
-
-        # Goal Check
-        if current == end:
-            return reconstruct_path(came_from, current)
-
-        # Neighbor Search
-        for dx, dy, cost in movements:
-            nx, ny = cx + dx, cy + dy
-            neighbor = (nx, ny)
-
-            # 1. Boundary Check
-            if not (0 <= nx < cols and 0 <= ny < rows):
-                continue
+    
+    while frontier:
+        _, current = heapq.heappop(frontier)
+        
+        if current == goal:
+            break
             
-            # 2. Obstacle Check (Note: grid[y][x])
-            if grid[ny][nx] == 0:
-                continue
+        x, y = current
+        for dx, dy in movements:
+            new_x = x + dx
+            new_y = y + dy
+            neighbor = (new_x, new_y)
             
-            # 3. Calculate Scores
-            tentative_g = g_score[current] + cost
-            
-            if neighbor not in g_score or tentative_g < g_score[neighbor]:
-                # Found a better path to neighbor
-                came_from[neighbor] = current
-                g_score[neighbor] = tentative_g
-                
-                # Heuristic: Euclidean Distance (Distance to Goal)
-                # h = math.sqrt((end[0] - nx)**2 + (end[1] - ny)**2)
-                # Optimization: Octile Distance is often preferred for 8-way grids, 
-                # but Euclidean is sufficient and produces smoother-looking paths.
-                h = math.hypot(end[0] - nx, end[1] - ny)
-                
-                f = tentative_g + h
-                heapq.heappush(open_set, (f, tentative_g, nx, ny))
-                
-    return [] # No path found
+            # Boundary control
+            if 0 <= new_x < x_len and 0 <= new_y < y_len:
+                # Obstacle verification and visit check
+                if grid[new_y][new_x] != 0 and neighbor not in visited:
+                    visited.add(neighbor)
+                    h_cost = euclidean_distance(neighbor, goal)
+                    heapq.heappush(frontier, (h_cost, neighbor))
+                    came_from[neighbor] = current
+                    
+    return reconstruct_path(came_from, start, goal)
 
-def reconstruct_path(came_from, current):
-    """Backtracks from end to start to build the path list."""
-    total_path = [current]
-    while current in came_from:
+def reconstruct_path(came_from, start, goal):
+    if goal not in came_from:
+        return None
+        
+    current = goal
+    path = []
+    while current is not None:
+        path.append(current)
         current = came_from[current]
-        total_path.append(current)
-    return total_path[::-1] # Return reversed (Start -> End)
+    path.reverse()
+    return path
 
 
 def has_line_of_sight(grid, p1, p2):
@@ -225,9 +196,9 @@ def smooth_trajectory(path, max_curvature=grid_step/(diameter/2), step_size=0.2)
 def find_path(start, end, grid):
         if not np.any(grid == 1):
             return [] 
-        path = find_A_star_path(start, end, grid)
-        if not path:
-            return path
+        path = greedy_best_first_search_euclidean(grid, start, end)
+        if path is None:
+            return None
         
         # reversing path to pull in the opposite direction
         path = pull_string(grid, path[::-1], add_lines = True )

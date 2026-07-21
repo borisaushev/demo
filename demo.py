@@ -83,9 +83,10 @@ def main():
             finder = FloorFinder(pcd)
             (points, obstacles, floor) = finder.get_floor_grid()
             
-            corrected_points = points[::-1, ::-1]
-            corrected_obstacles = obstacles[::-1, ::-1]
             corrected_floor = floor[::-1, ::-1]
+
+            # 2. Convert grid to 8-bit image array values (0 to 255)
+            floor_img = (corrected_floor * 255).astype(np.uint8)
             
             diameter_in_pixels = int(diameter / grid_step)
             corrected_floor = cv2.erode(corrected_floor, np.ones((diameter_in_pixels, diameter_in_pixels)))
@@ -101,25 +102,13 @@ def main():
             x_min = np.min(x_axis[y_axis == y_min])
             
             path = find_path((x_max, y_max), (x_min, y_min), corrected_floor)
-            path_img = visualize_path(corrected_floor, path)
-            
-            # 2. Convert grid to 8-bit image array values (0 to 255)
-            points_img = (corrected_points * 255).astype(np.uint8)
-            obstacles_img = (corrected_obstacles * 255).astype(np.uint8)
-            floor_img = (corrected_floor * 255).astype(np.uint8)
+            if path is not None:
+                path_img = visualize_path(corrected_floor, path)
+            else: 
+                path_img = visualize_path(corrected_floor, path = [])
             
             # 3. Rescale the matrix to a forced static window footprint
             # Note: OpenCV expects sizing order format as (Width, Height)
-            rescaled_points = cv2.resize(
-                points_img, 
-                (TARGET_WIDTH, TARGET_HEIGHT), 
-                interpolation=cv2.INTER_NEAREST
-            )
-            rescaled_obstacles = cv2.resize(
-                obstacles_img, 
-                (TARGET_WIDTH, TARGET_HEIGHT), 
-                interpolation=cv2.INTER_NEAREST
-            )
             rescaled_floor = cv2.resize(
                 floor_img, 
                 (TARGET_WIDTH, TARGET_HEIGHT), 
@@ -151,8 +140,6 @@ def main():
             )
             
             # 4. Show the locked-size display canvas with text overlay
-            # cv2.imshow('points', rescaled_points)
-            # cv2.imshow('obstacles', rescaled_obstacles)
             cv2.imshow('floor', display_img)
             cv2.imshow('path', path_img)
 
