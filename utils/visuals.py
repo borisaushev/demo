@@ -124,8 +124,6 @@ def visualize_path(grid, path):
 
         cv2.circle(vis_img, path[0], 5, (0, 255, 0), -1)
         cv2.circle(vis_img, path[-1], 5, (0, 0, 255), -1)
-    else:
-        print("No path found.")
         
     return vis_img
 

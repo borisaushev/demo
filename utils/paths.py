@@ -223,8 +223,16 @@ def smooth_trajectory(path, max_curvature=grid_step/(diameter/2), step_size=0.2)
      
 
 def find_path(start, end, grid):
+        if not np.any(grid == 1):
+            return [] 
         path = find_A_star_path(start, end, grid)
-        path = pull_string(grid, path[::-1], True)
-        path = pull_string(grid, path[::-1])
+        if not path:
+            return path
+        
+        # reversing path to pull in the opposite direction
+        path = pull_string(grid, path[::-1], add_lines = True )
+        # reversing it back and pulling in the original direction 
+        path = pull_string(grid, path[::-1], add_lines = False)
+
         return  smooth_trajectory(path)
 
