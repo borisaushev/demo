@@ -12,6 +12,11 @@ import time
 from utils.paths import *
 from utils.visuals import * 
 
+from tf2_ros import TransformException
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
+from scipy.spatial.transform import Rotation as R
+
 
 class RealTimePointCloudStreamer(Node):
     def __init__(self):
@@ -20,6 +25,7 @@ class RealTimePointCloudStreamer(Node):
         
         # Use a single atomic tracking variable instead of a growing list queue
         self.latest_frame = None
+        self.camera_coords = None
         self.lock = threading.Lock() # Prevents thread collisions between network and app loop
         
         # Use a Queue Size of 1 to tell ROS to drop old network frames instantly
@@ -29,21 +35,41 @@ class RealTimePointCloudStreamer(Node):
             self.cb, 
             1
         )
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.target_frame = 'map'
         
     def cb(self, msg):
         xyz = pc2.read_points_numpy(msg, field_names=("x", "y", "z"))
         xyz = xyz[~np.isnan(xyz).any(axis=1)] 
-        
+
         # Thread-safely overwrite with the newest data frame
         with self.lock:
             self.latest_frame = xyz
+
+        try:
+            t = self.tf_buffer.lookup_transform(
+                self.target_frame,
+                msg.header.frame_id,
+                rclpy.time.Time()
+            )
+            with self.lock:
+                self.camera_coords = (t.transform.translation.x,
+                                      t.transform.translation.y,
+                                      t.transform.translation.z)
+                                    
+        except TransformException as ex:
+            self.get_logger().warning(f'Could not transform cloud: {ex}')
+            return
 
     def get_current_frame(self):
         # Safely pull and consume the absolute newest frame available right now
         with self.lock:
             frame = self.latest_frame
-            self.latest_frame = None # Consume the frame so we don't process duplicates
-            return frame
+            camera_coords = self.camera_coords
+            self.latest_frame = None
+            self.camera_coords = None
+            return frame, camera_coords
 
 
 def main():
@@ -71,49 +97,38 @@ def main():
 
         # Infinite real-time execution loop
         while rclpy.ok():
-            points = streamer.get_current_frame()
+            points, camera_coords = streamer.get_current_frame()
             
-            if points is None:
+            if points is None or camera_coords is None:
                 time.sleep(0.01) 
                 continue
 
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(points)
             
-            finder = FloorFinder(pcd)
-            (points, obstacles, floor) = finder.get_floor_grid()
-            
-            corrected_floor = floor[::-1, ::-1]
+            finder = FloorFinder(pcd, camera_coords)
+            floor, camera_grid_coords = finder.get_floor_grid()
 
             # 2. Convert grid to 8-bit image array values (0 to 255)
-            floor_img = (corrected_floor * 255).astype(np.uint8)
+            floor_img = (floor * 255).astype(np.uint8)
             
             diameter_in_pixels = int(diameter / grid_step)
-            corrected_floor = cv2.erode(corrected_floor, np.ones((diameter_in_pixels, diameter_in_pixels)))
-            if not np.any(corrected_floor == 1):
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (diameter_in_pixels, diameter_in_pixels))
+            walkable_floor = cv2.erode(floor, kernel)
+            if not np.any(walkable_floor == 1):
                 continue
 
-            indeces = np.argwhere(corrected_floor > 0)
+            indeces = np.argwhere(walkable_floor > 0)
             y_axis = indeces[:, 0]
             x_axis = indeces[:, 1]
-            y_max = np.max(y_axis)
-            x_max = np.max(x_axis[y_axis == y_max])
-            y_min = np.min(y_axis)
-            x_min = np.min(x_axis[y_axis == y_min])
+            y_goal = np.min(y_axis)
+            x_goal = np.min(x_axis[y_axis == y_goal])
             
-            path = find_path((x_max, y_max), (x_min, y_min), corrected_floor)
-            if path is not None:
-                path_img = visualize_path(corrected_floor, path)
+            path = find_path(camera_grid_coords, (x_goal, y_goal), walkable_floor)
+            if path is None:
+                path_img = visualize_path(floor, path = [])
             else: 
-                path_img = visualize_path(corrected_floor, path = [])
-            
-            # 3. Rescale the matrix to a forced static window footprint
-            # Note: OpenCV expects sizing order format as (Width, Height)
-            rescaled_floor = cv2.resize(
-                floor_img, 
-                (TARGET_WIDTH, TARGET_HEIGHT), 
-                interpolation=cv2.INTER_NEAREST
-            )
+                path_img = visualize_path(floor, path)
             
             # Calculate rolling time difference and compute current FPS
             current_time = time.perf_counter()
@@ -124,19 +139,27 @@ def main():
                 fps = 1.0 / time_diff
 
             # Convert to color image so text can be rendered cleanly in color overlay
-            display_img = cv2.cvtColor(rescaled_floor, cv2.COLOR_GRAY2BGR)
+            display_img = cv2.cvtColor(floor_img, cv2.COLOR_GRAY2BGR)
 
             # Draw the FPS counter overlay onto the color canvas image matrix
             fps_text = f"FPS: {fps:.1f}"
             cv2.putText(
-                display_img, 
-                fps_text, 
-                (15, 35),                   # Coordinate location (X, Y)
-                cv2.FONT_HERSHEY_SIMPLEX,   # Font styling
-                1.0,                        # Font size scale
-                (0, 255, 0),                # Text color (B, G, R) = Green
-                2,                          # Text outline thickness
-                cv2.LINE_AA                 # Anti-aliasing quality flag
+                img=       display_img, 
+                text=      fps_text, 
+                org=       (15, 35),
+                fontFace=  cv2.FONT_HERSHEY_SIMPLEX,   
+                fontScale= 1.0,                        
+                color=     (0, 255, 0),                
+                thickness= 2,                      
+                lineType=  cv2.LINE_AA              
+            )
+
+            cv2.circle(
+                img=       display_img,
+                center=    camera_grid_coords,
+                radius=    10,
+                color=     (0, 255, 0),
+                thickness= -1
             )
             
             # 4. Show the locked-size display canvas with text overlay

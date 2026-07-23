@@ -203,7 +203,16 @@ def find_path(start, end, grid):
         # reversing path to pull in the opposite direction
         path = pull_string(grid, path[::-1], add_lines = True )
         # reversing it back and pulling in the original direction 
-        path = pull_string(grid, path[::-1], add_lines = False)
+        path = pull_string(grid, path[::-1], add_lines = True )
+        shortened_path = shorten_path(path)
+        shortened_path = pull_string(grid, shortened_path, add_lines = False)
 
-        return  smooth_trajectory(path)
+        return  smooth_trajectory(shortened_path)
 
+def shorten_path(path):
+    path_len = 0
+    for i in range(1, len(path)):
+        path_len += grid_step * euclidean_distance(path[i], path[i-1])
+        if path_len > 1:
+            break
+    return path[:i]

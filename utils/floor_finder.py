@@ -10,8 +10,9 @@ from utils.visuals import *
 from scipy.ndimage import maximum_filter
 
 class FloorFinder:
-    def __init__(self, pcd):
+    def __init__(self, pcd, camera_coords):
         self.pcd = pcd
+        self.camera_coords = camera_coords
     
 
     def dilate_inside_points_fast(self, grid):
@@ -72,9 +73,10 @@ class FloorFinder:
         # берем 2 перпендикулярных вектора в плоскости
         v1_norm = np.linalg.norm([b, -a, 0])
         plane_v1 = np.asarray([b, -a, 0]) / v1_norm
-        plane_v2 = np.cross(normal, plane_v1)
+        plane_v2 = np.cross(plane_v1, normal)
 
         #проецируем точки пола на плоскость пола
+        inliers = np.vstack([inliers, self.camera_coords])
         projected = project_to_plane(inliers, plane_model)
 
         #переходим от координат в пространстве в координаты 2-х векторов в плоскости
@@ -89,11 +91,16 @@ class FloorFinder:
         x_indices = ((plane_coords[:, 0] - x_min) // grid_step).astype(int)
         y_indices = ((y_max - plane_coords[:, 1]) // grid_step).astype(int) 
         valid_mask = (x_indices >= 0) & (x_indices < grid.shape[1]) & \
-                    (y_indices >= 0) & (y_indices < grid.shape[0])
+                     (y_indices >= 0) & (y_indices < grid.shape[0])
 
         grid[y_indices[valid_mask], x_indices[valid_mask]] = 1
+        camera_grid_coords = (x_indices[-1], y_indices[-1])
+        cv2.circle(grid, 
+                   center=camera_grid_coords,
+                   radius=int(1.7/grid_step),
+                   color=1,
+                   thickness=-1)
 
-        floor_points = np.copy(grid)
         grid = self.dilate_inside_points_fast(grid)
 
         # наращиваем точки пола
@@ -112,9 +119,6 @@ class FloorFinder:
 
         floor_obstacles = grid
         floor_obstacles[y_indices[valid_mask], x_indices[valid_mask]] = 0
-        floor_points[y_indices[valid_mask], x_indices[valid_mask]] = 0        
-
-        obstacles = np.copy(floor_obstacles)
 
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (morph_obst_size, morph_obst_size))
         floor_obstacles = cv2.morphologyEx(floor_obstacles, cv2.MORPH_OPEN, kernel)
@@ -161,4 +165,4 @@ class FloorFinder:
             if np.any(cv2.bitwise_and(obstacle, floor_polished_reversed[labels == i])):
                 floor_polished[labels == i] = 0
 
-        return floor_points, obstacles, floor_obstacles
+        return floor_obstacles, camera_grid_coords
