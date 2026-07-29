@@ -25,7 +25,6 @@ class RealTimePointCloudStreamer(Node):
         
         # Use a single atomic tracking variable instead of a growing list queue
         self.latest_frame = None
-        self.camera_coords = None
         self.lock = threading.Lock() # Prevents thread collisions between network and app loop
         
         # Use a Queue Size of 1 to tell ROS to drop old network frames instantly
@@ -35,9 +34,6 @@ class RealTimePointCloudStreamer(Node):
             self.cb, 
             1
         )
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.target_frame = 'map'
         
     def cb(self, msg):
         xyz = pc2.read_points_numpy(msg, field_names=("x", "y", "z"))
@@ -47,29 +43,12 @@ class RealTimePointCloudStreamer(Node):
         with self.lock:
             self.latest_frame = xyz
 
-        try:
-            t = self.tf_buffer.lookup_transform(
-                self.target_frame,
-                msg.header.frame_id,
-                rclpy.time.Time()
-            )
-            with self.lock:
-                self.camera_coords = (t.transform.translation.x,
-                                      t.transform.translation.y,
-                                      t.transform.translation.z)
-                                    
-        except TransformException as ex:
-            self.get_logger().warning(f'Could not transform cloud: {ex}')
-            return
-
     def get_current_frame(self):
         # Safely pull and consume the absolute newest frame available right now
         with self.lock:
             frame = self.latest_frame
-            camera_coords = self.camera_coords
             self.latest_frame = None
-            self.camera_coords = None
-            return frame, camera_coords
+            return frame
 
 
 def main():
@@ -87,49 +66,33 @@ def main():
     thread.start()
     
     try:
-        # Define your target window size (e.g., 640x640 or 800x600 pixels)
-        TARGET_WIDTH = 640
-        TARGET_HEIGHT = 640
-
         # Initialize FPS calculation trackers
         prev_time = time.perf_counter()
         fps = 0.0
 
         # Infinite real-time execution loop
         while rclpy.ok():
-            points, camera_coords = streamer.get_current_frame()
+            points = streamer.get_current_frame()
             
-            if points is None or camera_coords is None:
+            if points is None:
                 time.sleep(0.01) 
                 continue
 
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(points)
             
-            finder = FloorFinder(pcd, camera_coords)
+            finder = FloorFinder(pcd)
             floor, camera_grid_coords = finder.get_floor_grid()
+
+            radius_in_pixels = int(diameter / grid_step) // 2
+            x_coord, y_coord = camera_grid_coords
+            walking_path = floor[y_coord - radius_in_pixels : y_coord + radius_in_pixels, x_coord:]
+            pixel_distance = np.argmax(np.any(walking_path == 0, axis = 0))
+            distance = pixel_distance * grid_step
 
             # 2. Convert grid to 8-bit image array values (0 to 255)
             floor_img = (floor * 255).astype(np.uint8)
-            
-            diameter_in_pixels = int(diameter / grid_step)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (diameter_in_pixels, diameter_in_pixels))
-            walkable_floor = cv2.erode(floor, kernel)
-            if not np.any(walkable_floor == 1):
-                continue
 
-            indeces = np.argwhere(walkable_floor > 0)
-            y_axis = indeces[:, 0]
-            x_axis = indeces[:, 1]
-            y_goal = np.min(y_axis)
-            x_goal = np.min(x_axis[y_axis == y_goal])
-            
-            path = find_path(camera_grid_coords, (x_goal, y_goal), walkable_floor)
-            if path is None:
-                path_img = visualize_path(floor, path = [])
-            else: 
-                path_img = visualize_path(floor, path)
-            
             # Calculate rolling time difference and compute current FPS
             current_time = time.perf_counter()
             time_diff = current_time - prev_time
@@ -142,10 +105,10 @@ def main():
             display_img = cv2.cvtColor(floor_img, cv2.COLOR_GRAY2BGR)
 
             # Draw the FPS counter overlay onto the color canvas image matrix
-            fps_text = f"FPS: {fps:.1f}"
+            img_text = f"FPS: {fps:.1f} Dist: {distance:.1f}"
             cv2.putText(
                 img=       display_img, 
-                text=      fps_text, 
+                text=      img_text, 
                 org=       (15, 35),
                 fontFace=  cv2.FONT_HERSHEY_SIMPLEX,   
                 fontScale= 1.0,                        
@@ -164,7 +127,6 @@ def main():
             
             # 4. Show the locked-size display canvas with text overlay
             cv2.imshow('floor', display_img)
-            cv2.imshow('path', path_img)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 print("User requested exit.")

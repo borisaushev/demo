@@ -10,13 +10,11 @@ from utils.visuals import *
 from scipy.ndimage import maximum_filter
 
 class FloorFinder:
-    def __init__(self, pcd, camera_coords):
+    def __init__(self, pcd):
         self.pcd = pcd
-        self.camera_coords = camera_coords
-    
 
     def dilate_inside_points_fast(self, grid):
-        R = 8
+        R = inside_dilation_radius
         
         has_topleft  = maximum_filter(grid, size=(R+1, R+1), origin=(-R//2, -R//2)) == 1
         has_topright = maximum_filter(grid, size=(R+1, R+1), origin=(-R//2, R//2)) == 1
@@ -52,9 +50,9 @@ class FloorFinder:
         # Убираем слишком далекие от пола точки
         pcd_points = np.asarray(pcd.points)
         close_mask = np.abs(a * pcd_points[:, 0] 
-                        + b * pcd_points[:, 1] 
-                        + c * pcd_points[:, 2] 
-                        + d) <= max_dist
+                          + b * pcd_points[:, 1] 
+                          + c * pcd_points[:, 2] 
+                          + d) <= max_dist
         close_points = pcd_points[close_mask]
 
         close_points_ds = voxel_downsample_fast(close_points, grid_step)
@@ -67,16 +65,17 @@ class FloorFinder:
 
         #меняем направление нормали в сторону большего количества точек
         condition = np.dot(outliers, normal) + d < 0
-        if len(outliers[condition]) > len(outliers) // 2:
+        if len(outliers[condition]) < len(outliers) // 2:
             normal = -normal
 
         # берем 2 перпендикулярных вектора в плоскости
-        v1_norm = np.linalg.norm([b, -a, 0])
-        plane_v1 = np.asarray([b, -a, 0]) / v1_norm
+        v1 = [1, 0, 0]
+        plane_v1 = project_to_plane([v1], plane_model)[0]
         plane_v2 = np.cross(plane_v1, normal)
 
         #проецируем точки пола на плоскость пола
-        inliers = np.vstack([inliers, self.camera_coords])
+        camera_coords =  [0, 0 ,0]
+        inliers = np.vstack([inliers, camera_coords])
         projected = project_to_plane(inliers, plane_model)
 
         #переходим от координат в пространстве в координаты 2-х векторов в плоскости
@@ -97,7 +96,7 @@ class FloorFinder:
         camera_grid_coords = (x_indices[-1], y_indices[-1])
         cv2.circle(grid, 
                    center=camera_grid_coords,
-                   radius=int(1.7/grid_step),
+                   radius=int(0.5/grid_step),
                    color=1,
                    thickness=-1)
 
