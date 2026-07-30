@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import SingleThreadedExecutor # FIX: Explicitly handle the execution loop
+from std_msgs.msg import Float32
+from rclpy.executors import SingleThreadedExecutor
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 import numpy as np
@@ -50,16 +51,33 @@ class RealTimePointCloudStreamer(Node):
             self.latest_frame = None
             return frame
 
+class DistancePublisher(Node):
+    def __init__(self):
+        super().__init__('distance_publisher')
+        self.publisher_ = self.create_publisher(Float32, 'distance_publisher', 1)
+        timer_period = 0.1  # seconds
+        self.timer = self.create_timer(timer_period, self.timer_callback)
+        self.distance = -1.0
+
+    def update_distance(self, new_distance):
+        self.distance = new_distance
+
+    def timer_callback(self):
+        msg = Float32()
+        msg.data = self.distance
+        self.publisher_.publish(msg)
 
 def main():
     if not rclpy.ok():
         rclpy.init()
         
     streamer = RealTimePointCloudStreamer()
+    publisher = DistancePublisher()
     
     # FIX 1: Create a dedicated local executor instance instead of using the global shared one
     executor = SingleThreadedExecutor()
     executor.add_node(streamer)
+    executor.add_node(publisher)
     
     # FIX 2: Target executor.spin instead of rclpy.spin
     thread = threading.Thread(target=executor.spin, daemon=True)
@@ -89,6 +107,7 @@ def main():
             walking_path = floor[y_coord - radius_in_pixels : y_coord + radius_in_pixels, x_coord:]
             pixel_distance = np.argmax(np.any(walking_path == 0, axis = 0))
             distance = pixel_distance * grid_step
+            publisher.update_distance(distance)
 
             # 2. Convert grid to 8-bit image array values (0 to 255)
             floor_img = (floor * 255).astype(np.uint8)
@@ -137,6 +156,7 @@ def main():
     finally:
         # FIX 3: Fully dismantle the background executor system first
         executor.shutdown()  # This breaks the executor.spin loop and terminates the background thread
+        streamer.destroy_node()
         streamer.destroy_node()
         cv2.destroyAllWindows()
 
