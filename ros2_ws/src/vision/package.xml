@@ -9,7 +9,9 @@
 
   <!-- Оставляем только системный ROS 2 стек -->
   <depend>rclpy</depend>
-  <exec_depend>std_msgs</exec_depend>
+  <depend>std_srvs</depend>
+  <depend>rclcpp</depend>
+  
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>sensor_msgs_py</exec_depend>
 

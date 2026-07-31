@@ -8,6 +8,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+
 
 # Includes the header folder path
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/booster_robotics_sdk/include")
@@ -22,6 +24,7 @@ add_executable(controller src/walk_sdk.cpp)
 ament_target_dependencies(controller
   rclcpp
   std_msgs
+  std_srvs 
 )
 
 # Links the static library (drops the 'lib' prefix and '.a' extension)
