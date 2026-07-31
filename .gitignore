@@ -1,5 +1,8 @@
 /.venv/
-/dataset/
+/ros2_ws/src/vision/vision/dataset/
 *.ply
 .gitignore
-/utils/__pycache__
+/ros2_ws/src/vision/vision/utils/__pycache__
+/ros2_ws/build/
+/ros2_ws/install/
+/ros2_ws/log/
