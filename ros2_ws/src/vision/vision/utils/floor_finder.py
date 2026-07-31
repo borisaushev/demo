@@ -34,9 +34,10 @@ class FloorFinder:
 
     def get_floor_grid(self):
         pcd = self.pcd
+        downsampled_pcd = downsample(pcd)
 
         #Ищем плоскость пола и точки в ней и вне неё
-        plane_model, _ = pcd.segment_plane(distance_threshold = distance_threshold,
+        plane_model, _ = downsampled_pcd.segment_plane(distance_threshold = distance_threshold,
                                                        num_iterations = ransac_iterations,
                                                        ransac_n = 3)
         [a, b, c, d] = plane_model
@@ -44,18 +45,18 @@ class FloorFinder:
         normal = np.array([a, b, c])
 
         # Убираем слишком далекие от пола точки
-        pcd_points = np.asarray(pcd.points)
+        pcd_points = np.asarray(downsampled_pcd.points)
         plane_abc = [a, b, c]
-        close_mask = (np.abs(pcd_points[:, 1]) <= assertion_radus) & \
-                     (np.abs(pcd_points @ plane_abc + d) <= max_dist)
+        close_mask = (np.abs(pcd_points[:, 1]) <= assertion_radus)
                      
         close_points = pcd_points[close_mask]
+        close_points_ds = voxel_downsample_fast(close_points, grid_step)
 
         # Разделяем на inliers и outliers
-        close_distances_ds = np.abs(np.dot(close_points, normal) + d)
+        close_distances_ds = np.abs(np.dot(close_points_ds, normal) + d)
         inlier_mask = close_distances_ds <= distance_threshold
-        inliers = close_points[inlier_mask]
-        outliers = close_points[~inlier_mask]
+        inliers = close_points_ds[inlier_mask]
+        outliers = close_points_ds[~inlier_mask]
 
         #меняем направление нормали в сторону большего количества точек
         condition = np.dot(outliers, normal) + d < 0
@@ -108,7 +109,7 @@ class FloorFinder:
         x_indices = ((outliers_plane_coords[:, 0] - x_min) // grid_step).astype(int)
         y_indices = ((y_max - outliers_plane_coords[:, 1]) // grid_step).astype(int)
         valid_mask = (x_indices >= 0) & (x_indices < grid.shape[1]) & \
-                    (y_indices >= 0) & (y_indices < grid.shape[0])
+                     (y_indices >= 0) & (y_indices < grid.shape[0])
 
         floor_obstacles = grid
         floor_obstacles[y_indices[valid_mask], x_indices[valid_mask]] = 0

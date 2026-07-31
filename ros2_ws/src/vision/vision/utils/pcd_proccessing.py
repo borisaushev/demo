@@ -1,6 +1,23 @@
 import numpy as np
 from vision.utils.constants import * 
 
+def downsample(pcd):
+    if len(pcd.points) < max_downsample_points:
+        return pcd
+    random_points_count = max_downsample_points
+    random_indices = np.random.choice(len(pcd.points), random_points_count, replace=False)
+    return pcd.select_by_index(random_indices)
+
+# Voxel-Даунсемплинг через numpy (без Open3D)
+def voxel_downsample_fast(points, voxel_size):
+    voxel_indices = np.floor(points / voxel_size).astype(np.int32)
+    # Создаем уникальный ключ для каждого вокселя
+    voxel_keys = (voxel_indices[:, 0] * 1000000 + 
+                  voxel_indices[:, 1] * 1000 + 
+                  voxel_indices[:, 2])
+    _, unique_indices = np.unique(voxel_keys, return_index=True)
+    return points[unique_indices]
+
 #проектирование точек на плоскость
 def project_to_plane(points, plane_model):
     [a, b, c, d] = plane_model
