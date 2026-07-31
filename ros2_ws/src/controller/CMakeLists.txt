@@ -29,8 +29,15 @@ target_link_libraries(controller
   booster_robotics_sdk
 )
 
+install(DIRECTORY launch
+    DESTINATION share/${PROJECT_NAME}
+)
+
 install(TARGETS
   controller
-  DESTINATION lib/${PROJECT_NAME})
+  DESTINATION lib/${PROJECT_NAME}
+)
+  
+
 
 ament_package()
