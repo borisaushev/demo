@@ -3,6 +3,7 @@
 *.ply
 .gitignore
 /ros2_ws/src/vision/vision/utils/__pycache__
+/ros2_ws/src/vision/vision/__pycache__
 /ros2_ws/build/
 /ros2_ws/install/
 /ros2_ws/log/
